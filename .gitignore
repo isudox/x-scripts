@@ -1,1 +1,7 @@
 .DS_Store
+# Added by CJADK
+.cjadk/
+# Added by CJADK
+log/app.log
+# Added by CJADK
+.claude/
