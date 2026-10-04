@@ -16,6 +16,26 @@ def shell(code, *args, stdin=None):
 
 
 class InstallerTests(unittest.TestCase):
+    def test_debian_family_without_version_restriction(self):
+        for distro, like, version in [
+            ('ubuntu', '', '24.04'), ('ubuntu', 'debian', '26.04'),
+            ('debian', '', '13'), ('debian', '', '13.6'),
+            ('linuxmint', 'ubuntu debian', '22'), ('pop', 'ubuntu', '24.04'),
+            ('derivative', 'other debian', ''),
+        ]:
+            with self.subTest(distro=distro, version=version):
+                result = shell('ID=$1; ID_LIKE=$2; VERSION_ID=$3; is_debian_family',
+                               distro, like, version)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_unrelated_or_missing_distro_is_rejected(self):
+        for distro, like in [('fedora', 'rhel'), ('alpine', ''),
+                             ('notdebian', 'notubuntu'), ('', '')]:
+            with self.subTest(distro=distro):
+                result = shell('ID=$1; ID_LIKE=$2; is_debian_family', distro, like)
+                self.assertNotEqual(result.returncode, 0)
+        self.assertNotEqual(shell('unset ID ID_LIKE VERSION_ID; is_debian_family').returncode, 0)
+
     def test_share_uri_matches_config_and_encodes_name(self):
         result = shell('''
           parse_args "$@"

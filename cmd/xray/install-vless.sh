@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ubuntu 24.04: VLESS + REALITY + Vision
+# Ubuntu / Debian family: VLESS + REALITY + Vision
 set -Eeuo pipefail
 umask 077
 
@@ -49,6 +49,7 @@ usage() {
   --force            备份并替换已有配置（会生成新的客户端凭据）
   -h, --help         显示帮助
 默认更新系统、开启 BBR、安装官方最新稳定版 Xray（已有安装则复用）。
+支持 Ubuntu、Debian 及其衍生发行版，不限制版本号；需要 apt-get 和 systemd。
 EOF
 }
 die() { printf '错误：%s\n' "$*" >&2; exit 1; }
@@ -226,13 +227,27 @@ print(f"vless://{uid}@{address}:{port}?{query}#{quote(name, safe='')}")
 PYURI
 }
 
+is_debian_family() {
+  local distro
+  for distro in "${ID:-}" ${ID_LIKE:-}; do
+    case "$distro" in
+      ubuntu|debian) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 main() {
   parse_args "$@"
   [[ $EUID == 0 ]] || die '请使用 sudo bash 执行'
-  [[ $(uname -s) == Linux && -f /etc/os-release ]] || die '仅支持 Ubuntu 24.04'
+  [[ $(uname -s) == Linux && -f /etc/os-release ]] || die '需要提供 /etc/os-release 的 Linux 系统'
   # shellcheck source=/dev/null
   source /etc/os-release
-  [[ $ID == ubuntu && $VERSION_ID == 24.04 ]] || die '仅支持 Ubuntu 24.04'
+  is_debian_family || die '需要 Ubuntu、Debian 或其衍生发行版（检查 /etc/os-release 的 ID / ID_LIKE）'
+  local required_command
+  for required_command in apt-get systemctl flock; do
+    command -v "$required_command" >/dev/null 2>&1 || die "缺少必要命令：$required_command（flock 由 util-linux 提供）"
+  done
   [[ -d /run/systemd/system ]] || die '需要正在运行 systemd 的服务器'
   exec 9>/run/lock/xray-vless-install.lock
   flock -n 9 || die '已有安装任务正在运行'
@@ -257,7 +272,7 @@ main() {
   if ((UPGRADE)); then
     apt-get -o Dpkg::Options::=--force-confold upgrade -y
   fi
-  apt-get install -y --no-install-recommends curl ca-certificates unzip python3 openssl iproute2 kmod
+  apt-get install -y --no-install-recommends curl ca-certificates unzip python3 openssl iproute2 kmod procps coreutils util-linux
 
   log '检查监听端口和 REALITY 目标'
   local listeners

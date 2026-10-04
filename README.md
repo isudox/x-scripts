@@ -1,12 +1,18 @@
 # x-scripts
 
-## Ubuntu 24.04 一键安装 Xray VLESS
+## Ubuntu / Debian 系一键安装 Xray VLESS
 
-在 **Ubuntu 24.04、systemd、具有公网 IPv4 的服务器**上运行：
+在 **Ubuntu、Debian 或其衍生发行版，运行 systemd 且具有公网 IPv4 的服务器**上运行：
 
 ```bash
 sudo bash cmd/xray/install-vless.sh --address 你的服务器公网IPv4
 ```
+
+通过 `/etc/os-release` 的 `ID` / `ID_LIKE` 识别 Ubuntu、Debian 系，
+不限制 `VERSION_ID`，因此 Debian 13.x 也可通过系统识别。
+执行前检查 `apt-get`、`systemctl` 和 `flock`（由 `util-linux` 提供）。
+实际安装仍要求软件源可用、OpenSSL 支持 TLS 1.3、内核支持 BBR；不限制版本号
+不代表所有历史版本均已验证。当前已完成离线测试，尚未在 Ubuntu / Debian 真机验证安装。
 
 也可将 `--address` 设为解析到该服务器公网 IPv4 的域名。当前脚本监听 IPv4，
 不支持 IPv6-only 服务器。未传入 `--sni` 时，脚本自动随机选择通过检测的 SNI，
@@ -56,7 +62,7 @@ HTTP 跳转用途、客户端网络可达性或延迟排名，也不能代替客
 
 ### 自动执行的步骤
 
-1. 检查 Ubuntu 版本、systemd、参数和端口占用，阻止并发安装。
+1. 检查 Ubuntu / Debian 系标识、必要命令、systemd、参数和端口占用，阻止并发安装。
 2. 更新 apt 索引、默认升级系统并安装依赖，不自动重启服务器。
 3. 写入 `/etc/sysctl.d/99-xray-bbr.conf`，加载并验证 BBR。
 4. 通过 [XTLS 官方安装器](https://github.com/XTLS/Xray-install) 安装当前最新稳定版；
