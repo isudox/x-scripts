@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -16,6 +17,29 @@ def shell(code, *args, stdin=None):
 
 
 class InstallerTests(unittest.TestCase):
+    def test_connection_info_file_contents_and_permissions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / 'connection-info.txt'
+            destination.write_text('old credentials')
+            destination.chmod(0o644)
+            result = shell('''
+              ADDRESS=203.0.113.10; PORT=8443; SNI=www.example.com
+              UUID=test-uuid; PUBLIC_KEY=test-public; PRIVATE_KEY=test-private
+              SHORT_ID=0123456789abcdef
+              save_connection_info "$1" 'vless://test-link'
+            ''', str(destination))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            content = destination.read_text()
+            for field in ['Address: 203.0.113.10', 'Port: 8443', 'UUID: test-uuid',
+                          'PublicKey (Password): test-public', 'PrivateKey: test-private',
+                          'SNI: www.example.com', 'Target: www.example.com:443',
+                          'shortId: 0123456789abcdef', 'vless://test-link']:
+                self.assertIn(field, content)
+            self.assertNotIn('old credentials', content)
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(list(Path(directory).glob('*.tmp.*')), [])
+            self.assertNotIn('test-private', result.stdout + result.stderr)
+
     def test_debian_family_without_version_restriction(self):
         for distro, like, version in [
             ('ubuntu', '', '24.04'), ('ubuntu', 'debian', '26.04'),
@@ -126,10 +150,25 @@ class InstallerTests(unittest.TestCase):
 
     def test_key_formats(self):
         for private, public in [("PrivateKey", "Password"), ("Private key", "Public key"),
-                                ("PrivateKey", "PublicKey")]:
+                                ("PrivateKey", "PublicKey"),
+                                ("PrivateKey", "Password (PublicKey)")]:
             output = f"{private}: secret\n{public}: client\nHash32: ignored\n"
             self.assertEqual(shell("key_field private", stdin=output).stdout.strip(), "secret")
             self.assertEqual(shell("key_field public", stdin=output).stdout.strip(), "client")
+
+    def test_current_xray_keys_pass_validation(self):
+        private_key = 'A' * 43
+        public_key = 'B' * 43
+        output = f'PrivateKey: {private_key}\r\nPassword (PublicKey): {public_key}\r\nHash32: ignored\r\n'
+        result = shell('''
+          keys=$(cat)
+          PRIVATE_KEY=$(key_field private <<< "$keys")
+          PUBLIC_KEY=$(key_field public <<< "$keys")
+          [[ $PRIVATE_KEY =~ ^[A-Za-z0-9_-]{43}$ && $PUBLIC_KEY =~ ^[A-Za-z0-9_-]{43}$ ]]
+          printf '%s\\n%s\\n' "$PRIVATE_KEY" "$PUBLIC_KEY"
+        ''', stdin=output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [private_key, public_key])
 
     def test_configuration(self):
         result = shell('SNI=www.microsoft.com; UUID=test-id; PRIVATE_KEY=secret; SHORT_ID=0123456789abcdef; write_config')

@@ -34,6 +34,7 @@ UPGRADE=1
 FORCE=0
 XRAY=/usr/local/bin/xray
 CONFIG=/usr/local/etc/xray/config.json
+INFO_FILE=/root/xray-vless-info.txt
 WORK=
 BACKUP=
 REPLACED=0
@@ -162,13 +163,13 @@ cleanup() {
   exit "$status"
 }
 
-# Accept PrivateKey/Private key and Password/PublicKey/Public key output.
+# Accept legacy labels and current Xray's Password (PublicKey) label.
 key_field() {
   local wanted=$1
   awk -F: -v wanted="$wanted" '
     { key=tolower($1); gsub(/[[:space:]]/, "", key) }
     (wanted == "private" && key == "privatekey") ||
-    (wanted == "public" && (key == "password" || key == "publickey")) {
+    (wanted == "public" && (key == "password" || key == "publickey" || key == "password(publickey)")) {
       value=$2; gsub(/[[:space:]]/, "", value); print value; exit
     }'
 }
@@ -225,6 +226,27 @@ uid = quote(os.environ["XRAY_UUID"], safe="")
 query = urlencode(params, quote_via=quote, safe="")
 print(f"vless://{uid}@{address}:{port}?{query}#{quote(name, safe='')}")
 PYURI
+}
+
+save_connection_info() {
+  local destination=$1 uri=$2 temporary
+  temporary=$(mktemp "${destination}.tmp.XXXXXX") || return 1
+  if ! {
+    chmod 600 "$temporary" &&
+    {
+      printf 'Xray VLESS + REALITY + Vision\n'
+      printf 'GeneratedAt (UTC): %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      printf 'Address: %s\nPort: %s\n' "$ADDRESS" "$PORT"
+      printf 'UUID: %s\nPublicKey (Password): %s\nPrivateKey: %s\n' "$UUID" "$PUBLIC_KEY" "$PRIVATE_KEY"
+      printf 'SNI: %s\nTarget: %s:443\nshortId: %s\n' "$SNI" "$SNI" "$SHORT_ID"
+      printf 'Flow: xtls-rprx-vision\nFingerprint: chrome\n'
+      printf 'Config: %s\n\nVLESS URI:\n%s\n' "$CONFIG" "$uri"
+    } > "$temporary" &&
+    mv -f -- "$temporary" "$destination"
+  }; then
+    rm -f -- "$temporary"
+    return 1
+  fi
 }
 
 is_debian_family() {
@@ -349,6 +371,7 @@ EOF
 
   local uri
   uri=$(generate_vless_uri)
+  save_connection_info "$INFO_FILE" "$uri" || die "服务已启动，但连接信息保存失败：$INFO_FILE"
   printf '%s\n' "$uri" > /root/xray-vless-link.txt
   chmod 600 /root/xray-vless-link.txt
   log '安装完成'
@@ -357,6 +380,7 @@ EOF
     "$UUID" "$PUBLIC_KEY" "$SHORT_ID" "$SNI"
   printf 'VLESS URI 分享链接（用于支持 VLESS/REALITY 的客户端及 subconverter）：\n%s\n\n' "$uri"
   printf '链接：/root/xray-vless-link.txt\n配置：%s\n' "$CONFIG"
+  printf '完整连接信息（含私钥，仅 root 可读）：%s\n' "$INFO_FILE"
   printf '请在云厂商安全组放行入站 TCP %s；UFW 未启用时本脚本不会自动启用。\n' "$PORT"
   [[ ! -e /var/run/reboot-required ]] || printf '系统升级要求重启，请择时手动重启服务器。\n'
 }

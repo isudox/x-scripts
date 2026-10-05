@@ -67,18 +67,29 @@ HTTP 跳转用途、客户端网络可达性或延迟排名，也不能代替客
 3. 写入 `/etc/sysctl.d/99-xray-bbr.conf`，加载并验证 BBR。
 4. 通过 [XTLS 官方安装器](https://github.com/XTLS/Xray-install) 安装当前最新稳定版；
    已有 `/usr/local/bin/xray` 时复用，不自动升级 Xray。
-5. 生成 UUID、X25519 密钥和随机 16 位十六进制 shortId；兼容 `Password`、
+5. 生成 UUID、X25519 密钥和随机 16 位十六进制 shortId；兼容 `Password (PublicKey)`、`Password`、
    `PublicKey` 和 `Public key` 输出。
 6. 生成 VLESS + REALITY + Vision 配置，使用 `xray run -test` 验证后替换。
 7. 已安装 UFW 时添加 TCP 放行规则，但不自动启用 UFW；启动 Xray，检查进程监听
    并设置开机自启。
 8. 在 shell 中逐项输出本次配置使用的 UUID、对应私钥的 PublicKey（Password）、
    随机 shortId 和 SNI；同时输出 VLESS 导入链接，保存到
-   `/root/xray-vless-link.txt`（权限 `600`）。
+   `/root/xray-vless-link.txt`（权限 `600`）。完整连接信息保存至
+   `/root/xray-vless-info.txt`，完成后在 console 输出路径。
 
 配置遵循 [REALITY 官方示例](https://github.com/XTLS/REALITY/blob/main/README.en.md)，
 服务端采用 `network: raw` 和 `target`；链接使用客户端常见的 `type=tcp`。
-私钥仅保存在服务端配置中，客户端使用 `pbk`（公钥/Password）、UUID 和 shortId。
+私钥保存在服务端配置和上述完整连接信息文件中，客户端使用 `pbk`（公钥/Password）、UUID 和 shortId。
+
+完整连接信息文件包含生成时间（UTC）、服务器地址、端口、UUID、公钥、私钥、SNI、
+目标地址、shortId、flow、指纹、配置文件路径和 VLESS URI。由 root 创建，权限为
+`600`；成功重装时原子替换为本次信息，不保留该文件的历史版本。查看方式：
+
+```bash
+sudo cat /root/xray-vless-info.txt
+```
+
+此文件包含私钥，不要作为客户端分享文件公开发送；分享客户端时使用 VLESS URI。
 
 ### VLESS URI 分享链接与 subconverter
 
